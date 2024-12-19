@@ -68,7 +68,9 @@ module BattleshipGame (
     // Game boards (0: empty, 1: ship, 2: hit, 3: miss)
     reg [1:0] board_p1 [0:BOARD_SIZE-1][0:BOARD_SIZE-1];
     reg [1:0] board_p2 [0:BOARD_SIZE-1][0:BOARD_SIZE-1];
-    
+    reg [2:0] check_ship [0:BOARD_SIZE-1][0:BOARD_SIZE-1];  // 用於記錄每格對應的船種
+
+
     // Ship placement tracking
     reg [2:0] current_ship;
     reg [9:0] ship_pos_x, ship_pos_y;
@@ -84,6 +86,7 @@ module BattleshipGame (
     reg [9:0] cursor_x, cursor_y;
     reg submarine_power_p1, submarine_power_p2;
     reg continuous_hit;
+    reg continuous_hit_p1, continuous_hit_p2;
     
     // Warning display
     reg show_warning;
@@ -106,6 +109,11 @@ module BattleshipGame (
             (h_cnt < CONTINUOUS_HINT_X + CONTINUOUS_HINT_WIDTH) &&
             (v_cnt >= CONTINUOUS_HINT_Y) && 
             (v_cnt < CONTINUOUS_HINT_Y + CONTINUOUS_HINT_HEIGHT);
+
+    wire is_board_border = (h_cnt == BOARD_X_START + BOARD_SIZE * CELL_SIZE) || 
+            (v_cnt == BOARD_Y_START + BOARD_SIZE * CELL_SIZE) ||
+            (h_cnt == BOARD_X_START) ||
+            (v_cnt == BOARD_Y_START);
 
     // Clock divider for VGA
     clock_divider #(.n(2)) clk_div (
@@ -180,12 +188,15 @@ module BattleshipGame (
             submarine_pos_p2_x <= 0;
             submarine_pos_p2_y <= 0;
             LED <= 4'b0000;
+            continuous_hit_p1 <= 0;
+            continuous_hit_p2 <= 0;
 
             // Clear boards
             for (i = 0; i < BOARD_SIZE; i = i + 1) begin
                 for (j = 0; j < BOARD_SIZE; j = j + 1) begin
                     board_p1[i][j] <= 0;
                     board_p2[i][j] <= 0;
+                    check_ship[i][j] <= 0;
                 end
             end
         end else begin
@@ -212,12 +223,16 @@ module BattleshipGame (
                     submarine_pos_p1_y <= 0;
                     submarine_pos_p2_x <= 0;
                     submarine_pos_p2_y <= 0;
-                
+                    LED <= 4'b0000;
+                    continuous_hit_p1 <= 0;
+                    continuous_hit_p2 <= 0;
+
                     // Clear boards
                     for (i = 0; i < BOARD_SIZE; i = i + 1) begin
                         for (j = 0; j < BOARD_SIZE; j = j + 1) begin
                             board_p1[i][j] <= 0;
                             board_p2[i][j] <= 0;
+                            check_ship[i][j] <= 0;
                         end
                     end
 
@@ -316,28 +331,28 @@ module BattleshipGame (
                                     if (player1_turn) begin
                                         if (board_p2[cursor_y][cursor_x] == 1) begin  // Hit
                                             board_p2[cursor_y][cursor_x] <= 2;
-                                            if (continuous_hit && submarine_power_p1) begin
-                                                continuous_hit <= 1;
+                                            if (continuous_hit_p1) begin  // 如果開啟了連續轟炸
+                                                player1_turn <= 1;  // 保持當前玩家
                                             end else begin
-                                                player1_turn <= 0;
+                                                player1_turn <= 0;  // 換對手
                                             end
                                         end else begin  // Miss
                                             board_p2[cursor_y][cursor_x] <= 3;
-                                            continuous_hit <= 0;
-                                            player1_turn <= 0;
+                                            continuous_hit_p1 <= 0;  // 關閉連續轟炸
+                                            player1_turn <= 0;  // 換對手
                                         end
-                                    end else begin
+                                    end else begin  // 玩家2的回合
                                         if (board_p1[cursor_y][cursor_x] == 1) begin  // Hit
                                             board_p1[cursor_y][cursor_x] <= 2;
-                                            if (continuous_hit && submarine_power_p2) begin
-                                                continuous_hit <= 1;
+                                            if (continuous_hit_p2) begin  // 如果開啟了連續轟炸
+                                                player1_turn <= 0;  // 保持當前玩家
                                             end else begin
-                                                player1_turn <= 1;
+                                                player1_turn <= 1;  // 換對手
                                             end
                                         end else begin  // Miss
                                             board_p1[cursor_y][cursor_x] <= 3;
-                                            continuous_hit <= 0;
-                                            player1_turn <= 1;
+                                            continuous_hit_p2 <= 0;  // 關閉連續轟炸
+                                            player1_turn <= 1;  // 換對手
                                         end
                                     end
                                     
@@ -348,10 +363,10 @@ module BattleshipGame (
                                 end
                                 9'h58: begin  // Caps Lock for submarine power
                                     if (player1_turn && submarine_power_p1) begin
-                                        continuous_hit <= 1;
+                                        continuous_hit_p1 <= 1;
                                         submarine_power_p1 <= 0;
                                     end else if (!player1_turn && submarine_power_p2) begin
-                                        continuous_hit <= 1;
+                                        continuous_hit_p2 <= 1;
                                         submarine_power_p2 <= 0;
                                     end else begin
                                         show_warning <= 1;
@@ -464,14 +479,18 @@ module BattleshipGame (
                 if (ship_vertical) begin
                     if (player1_turn) begin
                         board_p1[ship_pos_y + i][ship_pos_x] <= 1;
+                        check_ship[ship_pos_y + i][ship_pos_x] <= current_ship;
                     end else begin
                         board_p2[ship_pos_y + i][ship_pos_x] <= 1;
+                        check_ship[ship_pos_y + i][ship_pos_x] <= current_ship;
                     end
                 end else begin
                     if (player1_turn) begin
                         board_p1[ship_pos_y][ship_pos_x + i] <= 1;
+                        check_ship[ship_pos_y][ship_pos_x + i] <= current_ship;
                     end else begin
                         board_p2[ship_pos_y][ship_pos_x + i] <= 1;
+                        check_ship[ship_pos_y][ship_pos_x + i] <= current_ship;
                     end
                 end
             end
@@ -552,7 +571,10 @@ module BattleshipGame (
                     end
                     
                     SETUP: begin
-                        if (in_board) begin
+                        if (is_board_border) begin
+                            pixel_data = 12'hFFF;  // White border
+                        end 
+                        else if (in_board) begin
                             // Calculate grid position
                             grid_x = board_x / CELL_SIZE;
                             grid_y = board_y / CELL_SIZE;
@@ -570,7 +592,7 @@ module BattleshipGame (
                                     end
                                 end else if (player1_turn ? board_p1[grid_y][grid_x] : board_p2[grid_y][grid_x]) begin
                                     is_submarine = check_is_submarine(grid_x, grid_y);
-                                    pixel_data = is_submarine ? SUBMARINE_COLOR : SHIP_COLOR;
+                                    pixel_data = (check_ship[grid_y][grid_x] == SUBMARINE) ? SUBMARINE_COLOR : SHIP_COLOR;
                                 end else begin
                                     pixel_data = (player1_turn ? pixel_data_bg[3] : pixel_data_bg[4]);
                                 end
@@ -591,7 +613,10 @@ module BattleshipGame (
                     end
                     
                     GAME: begin
-                        if (in_board) begin
+                        if (is_board_border) begin
+                            pixel_data = 12'hFFF;  // White border
+                        end 
+                        else if (in_board) begin
                             grid_x = board_x / CELL_SIZE;
                             grid_y = board_y / CELL_SIZE;
                             
@@ -612,7 +637,9 @@ module BattleshipGame (
                                     endcase
                                 end
                             end
-                        end else if (in_continuous_hint && continuous_hit) begin
+                        end else if (in_continuous_hint && 
+                            ((player1_turn && continuous_hit_p1) || 
+                             (!player1_turn && continuous_hit_p2))) begin
                             // 顯示連續轟炸提示
                             pixel_data = 12'hF00;  // 紅色提示
                         end else begin
