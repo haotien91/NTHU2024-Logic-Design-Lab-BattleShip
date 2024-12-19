@@ -27,6 +27,11 @@ module BattleshipGame (
     parameter BOARD_SIZE = 10;
     
     // VGA Parameters
+    parameter SCREEN_WIDTH = 1920;
+    parameter SCREEN_HEIGHT = 1080;
+    parameter BG_WIDTH = 160;
+    parameter BG_HEIGHT = 120;
+
     parameter BOARD_X_START = 100;  // Starting X coordinate of game board
     parameter BOARD_Y_START = 100;  // Starting Y coordinate of game board
     parameter CELL_SIZE = 40;       // Size of each cell in pixels
@@ -111,10 +116,17 @@ module BattleshipGame (
     blk_mem_gen_1 img1(.clka(clk), .addra(pixel_addr), .douta(pixel_data_bg[3]));  // P1 TURN
     blk_mem_gen_2 img2(.clka(clk), .addra(pixel_addr), .douta(pixel_data_bg[4]));  // P2 TURN
 
+    reg [11:0] scaled_x, scaled_y;
+
     // Pixel address calculation
     always @(*) begin
         if (valid) begin
-            pixel_addr = v_cnt * 640 + h_cnt;
+            // 計算縮放後的坐標
+            scaled_x = (h_cnt * BG_WIDTH) / SCREEN_WIDTH;
+            scaled_y = (v_cnt * BG_HEIGHT) / SCREEN_HEIGHT;
+            
+            // 計算對應的像素地址
+            pixel_addr = scaled_y * BG_WIDTH + scaled_x;
         end else begin
             pixel_addr = 0;
         end
@@ -492,7 +504,8 @@ module BattleshipGame (
             
             // Warning overlay
             if (show_warning) begin
-                if ((h_cnt < 5) || (h_cnt >= 635) || (v_cnt < 5) || (v_cnt >= 475)) begin
+                if ((h_cnt < 10) || (h_cnt >= SCREEN_WIDTH-10) || 
+                    (v_cnt < 10) || (v_cnt >= SCREEN_HEIGHT-10)) begin
                     pixel_data = WARNING_COLOR;
                 end
             end
