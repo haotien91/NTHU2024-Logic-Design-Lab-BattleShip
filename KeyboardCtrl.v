@@ -1,4 +1,4 @@
-module KeyboardCtrl#(
+module KeyboardCtrl_0#(
    parameter SYSCLK_FREQUENCY_HZ = 100000000
 )(
     output reg [7:0] key_in,
