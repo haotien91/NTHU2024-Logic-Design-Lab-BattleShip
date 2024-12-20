@@ -97,6 +97,10 @@ module BattleshipGame (
         ((h_cnt < 5) || (h_cnt >= SCREEN_WIDTH-5) || 
          (v_cnt < 5) || (v_cnt >= SCREEN_HEIGHT-5));
 
+    // 炸完等待三秒
+    reg wait_3sec;
+    reg [31:0] wait_3sec_counter;
+
     reg key_pressed;
     reg [8:0] pressed_key;
 
@@ -110,10 +114,16 @@ module BattleshipGame (
             (v_cnt >= CONTINUOUS_HINT_Y) && 
             (v_cnt < CONTINUOUS_HINT_Y + CONTINUOUS_HINT_HEIGHT);
 
-    wire is_board_border = (h_cnt == BOARD_X_START + BOARD_SIZE * CELL_SIZE) || 
-            (v_cnt == BOARD_Y_START + BOARD_SIZE * CELL_SIZE) ||
-            (h_cnt == BOARD_X_START) ||
-            (v_cnt == BOARD_Y_START);
+    // wire is_board_border = (h_cnt == BOARD_X_START + BOARD_SIZE * CELL_SIZE) || 
+    //         (v_cnt == BOARD_Y_START + BOARD_SIZE * CELL_SIZE) ||
+    //         (h_cnt == BOARD_X_START) ||
+    //         (v_cnt == BOARD_Y_START);
+
+    wire is_board_border = 
+    (h_cnt >= BOARD_X_START && h_cnt < BOARD_X_START + BOARD_SIZE * CELL_SIZE &&  // 水平方向
+     (v_cnt == BOARD_Y_START || v_cnt == BOARD_Y_START + BOARD_SIZE * CELL_SIZE - 1)) ||  // 上下邊框
+    (v_cnt >= BOARD_Y_START && v_cnt < BOARD_Y_START + BOARD_SIZE * CELL_SIZE &&  // 垂直方向
+     (h_cnt == BOARD_X_START || h_cnt == BOARD_X_START + BOARD_SIZE * CELL_SIZE - 1));  // 左右邊框
 
     // Clock divider for VGA
     clock_divider #(.n(2)) clk_div (
@@ -181,6 +191,7 @@ module BattleshipGame (
             continuous_hit <= 0;
             show_warning <= 0;
             warning_counter <= 0;
+            wait_3sec_counter <= 0;
             key_pressed <= 0;
             pressed_key <= 9'b0;
             submarine_pos_p1_x <= 0;
@@ -217,6 +228,7 @@ module BattleshipGame (
                     continuous_hit <= 0;
                     show_warning <= 0;
                     warning_counter <= 0;
+                    wait_3sec_counter <= 0;
                     key_pressed <= 0;
                     pressed_key <= 9'b0;
                     submarine_pos_p1_x <= 0;
@@ -332,28 +344,53 @@ module BattleshipGame (
                                         if (board_p2[cursor_y][cursor_x] == 1) begin  // Hit
                                             board_p2[cursor_y][cursor_x] <= 2;
                                             if (continuous_hit_p1) begin  // 如果開啟了連續轟炸
-                                                player1_turn <= 1;  // 保持當前玩家
+                                                wait_3sec <= 1;
+                                                wait_3sec_counter <= 32'd100_000_000;
+                                                // player1_turn <= 1;  // 保持當前玩家
                                             end else begin
-                                                player1_turn <= 0;  // 換對手
+                                                wait_3sec <= 1;
+                                                wait_3sec_counter <= 32'd100_000_000;
+                                                //player1_turn <= 0;  // 換對手
                                             end
-                                        end else begin  // Miss
+                                        end
+                                        else if(board_p2[cursor_y][cursor_x] == 2 || board_p2[cursor_y][cursor_x] == 3) begin
+                                            // warning
+                                            show_warning <= 1;
+                                            warning_counter <= 32'd75_000_000;
+                                        end
+                                        else begin  // Miss
                                             board_p2[cursor_y][cursor_x] <= 3;
                                             continuous_hit_p1 <= 0;  // 關閉連續轟炸
-                                            player1_turn <= 0;  // 換對手
+                                            wait_3sec <= 1;
+                                            wait_3sec_counter <= 32'd100_000_000;
+                                            //player1_turn <= 0;  // 換對手
                                         end
                                     end else begin  // 玩家2的回合
                                         if (board_p1[cursor_y][cursor_x] == 1) begin  // Hit
                                             board_p1[cursor_y][cursor_x] <= 2;
                                             if (continuous_hit_p2) begin  // 如果開啟了連續轟炸
-                                                player1_turn <= 0;  // 保持當前玩家
+                                                wait_3sec <= 1;
+                                                wait_3sec_counter <= 32'd100_000_000;
+                                                //player1_turn <= 0;  // 保持當前玩家
                                             end else begin
-                                                player1_turn <= 1;  // 換對手
+                                                wait_3sec <= 1;
+                                                wait_3sec_counter <= 32'd100_000_000;
+                                                //player1_turn <= 1;  // 換對手
                                             end
-                                        end else begin  // Miss
+                                        end 
+                                        else if(board_p1[cursor_y][cursor_x] == 2 || board_p1[cursor_y][cursor_x] == 3) begin
+                                            // warning
+                                            show_warning <= 1;
+                                            warning_counter <= 32'd75_000_000;
+                                        end
+                                        else begin  // Miss
                                             board_p1[cursor_y][cursor_x] <= 3;
                                             continuous_hit_p2 <= 0;  // 關閉連續轟炸
-                                            player1_turn <= 1;  // 換對手
+                                            wait_3sec <= 1;
+                                            wait_3sec_counter <= 32'd100_000_000;
+                                            // player1_turn <= 1;  // 換對手
                                         end
+                                        
                                     end
                                     
                                     // Check for game end
@@ -362,10 +399,10 @@ module BattleshipGame (
                                     end
                                 end
                                 9'h58: begin  // Caps Lock for submarine power
-                                    if (player1_turn && submarine_power_p1) begin
+                                    if (player1_turn && submarine_power_p1 && !is_submarine_destroyed(1'b0)) begin
                                         continuous_hit_p1 <= 1;
                                         submarine_power_p1 <= 0;
-                                    end else if (!player1_turn && submarine_power_p2) begin
+                                    end else if (!player1_turn && submarine_power_p2 && !is_submarine_destroyed(1'b0)) begin
                                         continuous_hit_p2 <= 1;
                                         submarine_power_p2 <= 0;
                                     end else begin
@@ -395,6 +432,18 @@ module BattleshipGame (
                     warning_counter <= warning_counter - 1;
                 end else begin
                     show_warning <= 0;
+                end
+            end
+
+            // wait 3 second timer
+            if (wait_3sec) begin
+                if (wait_3sec_counter > 0) begin
+                    wait_3sec_counter <= wait_3sec_counter - 1;
+                end else begin
+                    wait_3sec <= 0;
+                    if(continuous_hit_p1) player1_turn <= 1;
+                    else if(continuous_hit_p2) player1_turn <= 0; 
+                    else player1_turn <= !player1_turn;
                 end
             end
         end
@@ -597,15 +646,20 @@ module BattleshipGame (
                                     pixel_data = (player1_turn ? pixel_data_bg[3] : pixel_data_bg[4]);
                                 end
                             end
-                        end else if (is_in_ship_display(CARRIER, 5) && !ships_placed_p1[CARRIER]) begin
+                        end else if (is_in_ship_display(CARRIER, 5) && 
+                            !(player1_turn ? ships_placed_p1[CARRIER] : ships_placed_p2[CARRIER])) begin
                             pixel_data = (current_ship == CARRIER) ? 12'hFFF : SHIP_COLOR;
-                        end else if (is_in_ship_display(BATTLESHIP, 4) && !ships_placed_p1[BATTLESHIP]) begin
+                        end else if (is_in_ship_display(BATTLESHIP, 4) &&
+                                    !(player1_turn ? ships_placed_p1[BATTLESHIP] : ships_placed_p2[BATTLESHIP])) begin
                             pixel_data = (current_ship == BATTLESHIP) ? 12'hFFF : SHIP_COLOR;
-                        end else if (is_in_ship_display(CRUISER, 3) && !ships_placed_p1[CRUISER]) begin
+                        end else if (is_in_ship_display(CRUISER, 3) &&
+                                    !(player1_turn ? ships_placed_p1[CRUISER] : ships_placed_p2[CRUISER])) begin
                             pixel_data = (current_ship == CRUISER) ? 12'hFFF : SHIP_COLOR;
-                        end else if (is_in_ship_display(SUBMARINE, 3) && !ships_placed_p1[SUBMARINE]) begin
+                        end else if (is_in_ship_display(SUBMARINE, 3) &&
+                                    !(player1_turn ? ships_placed_p1[SUBMARINE] : ships_placed_p2[SUBMARINE])) begin
                             pixel_data = (current_ship == SUBMARINE) ? 12'hFFF : SUBMARINE_COLOR;
-                        end else if (is_in_ship_display(DESTROYER, 2) && !ships_placed_p1[DESTROYER]) begin
+                        end else if (is_in_ship_display(DESTROYER, 2) &&
+                                    !(player1_turn ? ships_placed_p1[DESTROYER] : ships_placed_p2[DESTROYER])) begin
                             pixel_data = (current_ship == DESTROYER) ? 12'hFFF : SHIP_COLOR;
                         end else begin
                             pixel_data = (player1_turn ? pixel_data_bg[3] : pixel_data_bg[4]);
@@ -625,7 +679,7 @@ module BattleshipGame (
                                 pixel_data = 12'hFFF;
                             end else begin
                                 // Show cursor
-                                if ((grid_x == cursor_x) && (grid_y == cursor_y)) begin
+                                if ((grid_x == cursor_x) && (grid_y == cursor_y) && wait_3sec == 0) begin
                                     pixel_data = 12'hFF0;  // Yellow cursor
                                 end else begin
                                     // Display hits and misses
@@ -751,9 +805,37 @@ module BattleshipGame (
         end
     endfunction
     
+    function is_submarine_destroyed;
+        input dummy;  // Verilog functions require an input
+        reg destroyed;
+        integer i;
+        begin
+            destroyed = 1;  // 假設潛艇已被摧毀
+            if (player1_turn) begin
+                // 檢查玩家1的潛艇位置
+                for (i = 0; i < 3; i = i + 1) begin
+                    if (board_p1[submarine_pos_p1_y + i][submarine_pos_p1_x] != 2 &&  // 垂直方向
+                        board_p1[submarine_pos_p1_y][submarine_pos_p1_x + i] != 2)    // 水平方向
+                        destroyed = 0;  // 若未全擊中，則潛艇未被摧毀
+                end
+            end else begin
+                // 檢查玩家2的潛艇位置
+                for (i = 0; i < 3; i = i + 1) begin
+                    if (board_p2[submarine_pos_p2_y + i][submarine_pos_p2_x] != 2 &&  // 垂直方向
+                        board_p2[submarine_pos_p2_y][submarine_pos_p2_x + i] != 2)    // 水平方向
+                        destroyed = 0;  // 若未全擊中，則潛艇未被摧毀
+                end
+            end
+            is_submarine_destroyed = destroyed;
+        end
+    endfunction
+
     // VGA output assignment
-    assign vgaRed = pixel_data[11:8];
-    assign vgaGreen = pixel_data[7:4];
-    assign vgaBlue = pixel_data[3:0];
+    // assign vgaRed = pixel_data[11:8];
+    // assign vgaGreen = pixel_data[7:4];
+    // assign vgaBlue = pixel_data[3:0];
     
+    assign {vgaRed, vgaGreen, vgaBlue} = (valid==1'b1) ? pixel_data : 12'b0;
+
+
 endmodule
