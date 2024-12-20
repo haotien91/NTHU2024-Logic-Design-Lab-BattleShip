@@ -1,4 +1,4 @@
-你是一個擅長 Verilog 的開發者，目前我正在開發一款利用 Verilog 實作，運行在單一 FPGA 上的雙人對戰 battleship 桌遊，請你為我寫好complete, concise, executable的程式碼。
+你是一個擅長標準 Verilog 的開發者，目前我正在開發一款利用 Verilog 實作，運行在單一 FPGA 上的雙人對戰 battleship 桌遊，請你為我寫好complete, concise, executable的程式碼。
 
 
 ## 我已經提供你所有可以利用到的模組，包含:
@@ -127,3 +127,52 @@ GAME state 時，兩位玩家輪流轟炸對方的棋盤
 在 FINISH state 中，背景圖片使用 blk_mem_2 作為底，全屏。
 
 當用戶按下 Enter，返回到 INIT state，並且清空過去紀錄。
+
+
+
+# 補充:
+1. 請給我完整的程式碼，避免截斷。如果發生截斷，請提供我"可重疊"的程式碼，可重疊的意思是，新程式碼的開頭必須要覆蓋到前一次生成的內容。
+2. 我使用的是標準 verilog 語法，請注意避免
+* declaration in unnamed block
+* for loop 內宣告 int (你需要提前宣告 integer)
+* for loop 內不可以使用 i++， verilog 並不支援這個語法。你需要使用 i = i + 1
+* verilog 不支援 XXX ? AA:BB; 語法
+3. 所有 function 都必須要有輸入，如果該 function 並非 void function，則需要有輸出
+4. 所有的 blk_mem 模組都已經定義好，你可以直接使用。使用方法請參考以下範例，這是我在其他專案做的:
+```
+    reg [16:0] pixel_addr;
+    wire [11:0] pixel_data [0:7];
+
+    blk_mem_gen_0 img0(.clka(clk), .addra(pixel_addr), .douta(pixel_data[0]), .wea(1'b0), .dina(12'b0));
+    blk_mem_gen_1 img1(.clka(clk), .addra(pixel_addr), .douta(pixel_data[1]), .wea(1'b0), .dina(12'b0));
+    blk_mem_gen_2 img2(.clka(clk), .addra(pixel_addr), .douta(pixel_data[2]), .wea(1'b0), .dina(12'b0));
+    blk_mem_gen_3 img3(.clka(clk), .addra(pixel_addr), .douta(pixel_data[3]), .wea(1'b0), .dina(12'b0));
+    blk_mem_gen_4 img4(.clka(clk), .addra(pixel_addr), .douta(pixel_data[4]), .wea(1'b0), .dina(12'b0));
+    blk_mem_gen_5 img5(.clka(clk), .addra(pixel_addr), .douta(pixel_data[5]), .wea(1'b0), .dina(12'b0));
+    blk_mem_gen_6 img6(.clka(clk), .addra(pixel_addr), .douta(pixel_data[6]), .wea(1'b0), .dina(12'b0));
+    blk_mem_gen_7 img7(.clka(clk), .addra(pixel_addr), .douta(pixel_data[7]), .wea(1'b0), .dina(12'b0));
+
+    // Pixel address calculation
+    reg [9:0] local_x, local_y;
+    always @(*) begin
+        if (valid) begin
+            current_block = (v_cnt / 120) * 4 + (h_cnt / 160);
+            
+            if (state == GAME && !hint && !card_state[current_block]) begin
+                pixel_addr = 0;
+            end else begin
+                local_x = (h_cnt % 160) / 2;
+                local_y = (v_cnt % 120) / 2;
+                
+                if (mirror_state[current_block]) begin
+                    pixel_addr = (BLOCK_HEIGHT - 1 - local_y) * BLOCK_WIDTH + local_x;
+                end else begin
+                    pixel_addr = local_y * BLOCK_WIDTH + local_x;
+                end
+            end
+        end else begin
+            pixel_addr = 0;
+            current_block = 0;
+        end
+    end
+```
